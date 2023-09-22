@@ -89,7 +89,7 @@ module.exports = (app) => {
     }
   });
 
-  cron.schedule("00 12 * * 1-6", () => {
+  cron.schedule("00 21 * * 1-6", () => {
     // Checkear la blacklist antes de ejecutar la función
     if (blacklist.includes(dateString)) {
       console.log(`La fecha ${dateString} está en la blacklist y no se ejecutará la tarea.`);
@@ -201,68 +201,73 @@ module.exports = (app) => {
 
   // Funcion que se ejecuta para actualizar los datos de los clientes ASITIO, ACTIVO, Nuevos clientes
   function actualizaDatos() {
-    Firebird.attach(odontos, function (err, db) {
-      if (err) throw err;
+    let losClientes = [];
+    // Obtener los datos de los clientes a quienes se les sigue enviando mensajes
+    Primera_consulta.findAll({
+      where: {
+        ASISTIO: 0,
+        ACTIVO: 1,
+      },
+      order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
+      attributes: ["COD_CLIENTE"],
+      limit: 15, // Límite de 500 registros
+    })
+      .then((result) => {
+        losClientes = result;
+        console.log("Los clientes de postgres a consultar estados:", losClientes.length);
+      })
+      .then(() => {
+        // Inicia el for por cada cliente para consultar su estado al JKMT
+        for (let item of losClientes) {
+          console.log(item.COD_CLIENTE);
 
-      // db = DATABASE
-      db.query(
-        // Trae los ultimos 50 registros de turnos del JKMT
-        "SELECT * FROM VW_RESUMEN_TURNOS_AYER",
-        //"SELECT COUNT(*) FROM VW_RESUMEN_TURNOS_HOY",
-        function (err, result) {
-          console.log("Cant de turnos obtenidos del JKMT:", result.length);
+          Firebird.attach(odontos, function (err, db) {
+            if (err) throw err;
 
-          // Recorre el array que contiene los datos e inserta en la base de postgresql
-          result.forEach((e) => {
-            // Si el nro de cert trae NULL cambiar por 000000
-            if (!e.NRO_CERT) {
-              e.NRO_CERT = " ";
-            }
-            // Si no tiene plan
-            if (!e.PLAN_CLIENTE) {
-              e.PLAN_CLIENTE = " ";
-            }
-            // Si la hora viene por ej: 11:0 entonces agregar el 0 al final
-            if (e.HORA[3] === "0") {
-              e.HORA = e.HORA + "0";
-            }
-            // Si la hora viene por ej: 10:3 o 11:2 entonces agregar el 0 al final
-            if (e.HORA.length === 4 && e.HORA[0] === "1") {
-              e.HORA = e.HORA + "0";
-            }
-            // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
-            // Si no reemplazar el 0 por el 595
-            if (!e.TELEFONO_MOVIL) {
-              e.TELEFONO_MOVIL = "595000";
-              e.estado_envio = 2;
-            } else {
-              e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
-            }
+            // db = DATABASE
+            db.query(
+              // Escribir el script que va a traer los datos del jakemate
+              "SELECT C.EDAD FROM CLIENTES C WHERE C.COD_CLIENTE = " + item.COD_CLIENTE + ";",
 
-            // Reemplazar por mi nro para probar el envio
-            // if (!e.TELEFONO_MOVIL) {
-            //   e.TELEFONO_MOVIL = "595000";
-            //   e.estado_envio = 2;
-            // } else {
-            //   e.TELEFONO_MOVIL = "595986153301";
-            // }
+              function (err, result) {
+                console.log("Cant de turnos obtenidos del JKMT:", result);
 
-            // Poblar PGSQL
-            Primera_consulta.create(e)
-              //.then((result) => res.json(result))
-              .catch((error) => console.log("Error al poblar PGSQL", error.message));
+                // Recorre el array que contiene los datos e inserta en la base de postgresql
+                // result.forEach((e) => {
+                //   // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
+                //   // Si no reemplazar el 0 por el 595
+                //   if (!e.TELEFONO_MOVIL) {
+                //     e.TELEFONO_MOVIL = "595000";
+                //     e.estado_envio = 2;
+                //   } else {
+                //     e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
+                //   }
+
+
+                //   // Poblar PGSQL
+                //   Primera_consulta.create(e)
+                //     //.then((result) => res.json(result))
+                //     .catch((error) => console.log("Error al poblar PGSQL", error.message));
+                // });
+
+                // IMPORTANTE: cerrar la conexion
+                db.detach();
+                
+                // Se actualiza los datos del cliente
+                // Aca va la funcion que va a actualizar los datos del cliente en la base del postgres
+              }
+            );
           });
-
-          // IMPORTANTE: cerrar la conexion
-          db.detach();
-          console.log(
-            "Llama a la funcion iniciar envio que se retrasa 1 min en ejecutarse No Asistidos"
-          );
-          iniciarEnvio();
         }
-      );
-    });
+      })
+      .catch((error) => {
+        res.status(402).json({
+          msg: error.menssage,
+        });
+      });
   }
+
+  actualizaDatos();
 
   // Calcular la fecha de hace un mes
   const fechaHaceUnMes = new Date();
