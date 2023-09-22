@@ -64,7 +64,7 @@ module.exports = (app) => {
   const Primera_consulta = app.db.models.Primera_consulta;
   const Users = app.db.models.Users;
 
-  // Ejecutar la funcion de 24hs Ayer de Lunes(1) a Sabados (6) a las 07:00am
+  // Funcion que ejecuta los envios - Ejecutar la funcion de 24hs Ayer de Lunes(1) a Sabado (6) a las 07:00
   cron.schedule("00 7 * * 1-6", () => {
     let hoyAhora = new Date();
     let diaHoy = hoyAhora.toString().slice(0, 3);
@@ -89,6 +89,7 @@ module.exports = (app) => {
     }
   });
 
+  // Funcion que actualiza los datos de los clientes - Se ejecuta de Lunes a Sabado a las 21:00
   cron.schedule("00 21 * * 1-6", () => {
     // Checkear la blacklist antes de ejecutar la función
     if (blacklist.includes(dateString)) {
@@ -267,7 +268,7 @@ module.exports = (app) => {
       });
   }
 
-  actualizaDatos();
+  //actualizaDatos();
 
   // Calcular la fecha de hace un mes
   const fechaHaceUnMes = new Date();
