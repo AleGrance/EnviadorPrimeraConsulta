@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 var Firebird = require("node-firebird");
+const moment = require('moment');
 
 var odontos = {};
 
@@ -35,13 +36,7 @@ let mensajePie = `
 let mensajePieCompleto = "";
 
 // Ruta de la imagen JPEG
-const imagePath = path.join(
-  __dirname,
-  "..",
-  "assets",
-  "img",
-  "primera_consulta.png"
-);
+const imagePath = path.join(__dirname, "..", "assets", "img", "primera_consulta.png");
 // Leer el contenido de la imagen como un buffer
 const imageBuffer = fs.readFileSync(imagePath);
 // Convertir el buffer a base64
@@ -89,60 +84,91 @@ module.exports = (app) => {
     injeccionFirebird();
   });
 
-  // Trae los turnos del JKMT al PGSQL
-  function injeccionFirebird() {
+  // Funcion que se ejecuta 1 vez al iniciar la app para poblar el postgresql
+  function primeraConsultaJkmt() {
     Firebird.attach(odontos, function (err, db) {
       if (err) throw err;
 
       // db = DATABASE
       db.query(
         // Trae los ultimos 50 registros de turnos del JKMT
-        "SELECT * FROM VW_RESUMEN_TURNOS_AYER",
-        //"SELECT COUNT(*) FROM VW_RESUMEN_TURNOS_HOY",
+        `SELECT c.cod_configuracion,
+        CL.COD_CLIENTE,
+        CL.NOMBRE,
+        CASE WHEN CL.NRO_DOCUMENTO IS NULL THEN '0' ELSE CL.NRO_DOCUMENTO END NRO_DOCUMENTO,
+        CASE WHEN CL.TELEFONO IS NULL THEN '0' ELSE CL.TELEFONO END TELEFONO,
+        CASE WHEN CL.TELEFONO_MOVIL IS NULL THEN '0' ELSE CL.TELEFONO_MOVIL END TELEFONO_MOVIL,
+        CASE WHEN CL.TELEFONO_LABORAL IS NULL THEN '0' ELSE CL.TELEFONO_LABORAL END  TELEFONO_LABORAL,
+        CA.DESCRIPCION AS TIPO_AFILIADO,
+        CPC.IMPORTE AS CUOTA_SOCIAL_GRUPO,
+        P.DESCRIPCION AS PLAN_SERVICIO,
+        E.ESTADO AS ESTADO_DEUDA,
+        en.NOMBRE as entidadconvenio,
+        ccp.CATEGORIA,
+        case when mc.TABLA_ASOCIADA = 'MEDIOS_COBROS_CONVENIOS' then 'CONVENIOS_ASOCIACIONES'
+             when mc.TABLA_ASOCIADA = 'MEDIOS_COBROS_BANCOS' OR MC.TABLA_ASOCIADA = 'MEDIOS_COBROS_DEB_AUTOMATICOS' then 'DEBITOS'
+             else 'PARTICULARES'
+         end medio_pago,
+        CAST(C.FECHA_INGRESO AS DATE) AS FECHA_INGRESO,
+        z.DESCRIPCION as zona_cob,
+        (select NOMBRE from sucursales where cod_sucursal = cpc.COD_SUCURSAL) as sucursal_venta,
+        (select NOMBRE from sucursales where cod_sucursal = cpc.COD_SUCURSAL_DESTINO) as sucursal_destino
+        FROM CONFIG_CUOTA_PER_CLIENTES C
+        JOIN CLIENTES CL ON CL.COD_CLIENTE=C.COD_CLIENTE
+        JOIN CONFIG_CUOTAS_PERIODICAS CPC ON CPC.COD_CONFIGURACION=C.COD_CONFIGURACION
+        JOIN ESTADOS_DEUDAS E ON E.COD_ESTADO_DEUDA=CPC.COD_ESTADO_DEUDA
+        JOIN PLAN_SERVICIOS_SOCIALES P ON P.COD_PLAN_SERVICIO_SOCIAL=C.COD_PLAN_SERVICIO
+        JOIN CAT_AFILIADO CA ON CA.COD_CATEGORIA=C.COD_CATEGORIA_AFILIADO
+        join ENTIDADES en ON cpc.COD_ENTIDAD_CONVENIO = en.COD_ENTIDAD
+        join CAT_CUOTAS_PERIODICAS ccp on ccp.COD_CAT_CUOTA_PERIODICA = cpc.COD_CAT_CUOTA_PERIODICA
+        join MEDIOS_COBROS mc on mc.COD_MEDIO_COBRO = cpc.COD_MEDIO_COBRO
+        join zona_cobranza  z on z.COD_ZONA_COBRANZA = mc.COD_ZONA_COBRANZA
+        WHERE C.FECHA_SALIDA IS NULL
+        AND CA.COD_CATEGORIA NOT IN('101')
+        and c.cod_configuracion = (select  max(co.COD_CONFIGURACION)
+                                   from CONFIG_CUOTA_PER_CLIENTES co
+                                   where co.COD_CLIENTE = c.COD_CLIENTE
+                                   and   co.COD_CONFIGURACION = c.COD_CONFIGURACION)
+        AND C.FECHA_INGRESO BETWEEN '1900-01-01' AND '2023-09-22'
+        AND C.COD_CLIENTE NOT IN (SELECT X.COD_CLIENTE FROM TURNOS X WHERE X.ASISTIO=1)
+        ORDER BY C.COD_CONFIGURACION`,
+
         function (err, result) {
-          console.log("Cant de turnos obtenidos del JKMT:", result.length);
+          console.log("Cant de registros obtenidos del JKMT:", result.length);
 
           // Recorre el array que contiene los datos e inserta en la base de postgresql
           result.forEach((e) => {
-            // Si el nro de cert trae NULL cambiar por 000000
-            if (!e.NRO_CERT) {
-              e.NRO_CERT = " ";
-            }
-            // Si no tiene plan
-            if (!e.PLAN_CLIENTE) {
-              e.PLAN_CLIENTE = " ";
-            }
-            // Si la hora viene por ej: 11:0 entonces agregar el 0 al final
-            if (e.HORA[3] === "0") {
-              e.HORA = e.HORA + "0";
-            }
-            // Si la hora viene por ej: 10:3 o 11:2 entonces agregar el 0 al final
-            if (e.HORA.length === 4 && e.HORA[0] === "1") {
-              e.HORA = e.HORA + "0";
-            }
             // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
             // Si no reemplazar el 0 por el 595
-            if (!e.TELEFONO_MOVIL) {
-              e.TELEFONO_MOVIL = "595000";
-              e.estado_envio = 2;
-            } else {
-              e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
-            }
+            // if (!e.TELEFONO_MOVIL) {
+            //   if (!e.TELEFONO) {
+            //     e.TELEFONO_MOVIL = "595000";
+            //     e.estado_envio = 2;
+            //   } else {
+            //     e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
+            //   }
+            // } else {
+            //   e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
+            // }
 
             // Reemplazar por mi nro para probar el envio
-            // if (!e.TELEFONO_MOVIL) {
-            //   e.TELEFONO_MOVIL = "595000";
-            //   e.estado_envio = 2;
-            // } else {
-            //   e.TELEFONO_MOVIL = "595986153301";
-            // }
+            if (!e.TELEFONO_MOVIL) {
+              if (!e.TELEFONO) {
+                e.TELEFONO_MOVIL = "595000";
+                e.estado_envio = 2;
+              } else {
+                //e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
+                e.TELEFONO_MOVIL = "595974107341";
+              }
+            } else {
+              //e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
+              e.TELEFONO_MOVIL = "595974107341";
+            }
 
             // Poblar PGSQL
             Primera_consulta.create(e)
               //.then((result) => res.json(result))
-              .catch((error) =>
-                console.log("Error al poblar PGSQL", error.message)
-              );
+              .catch((error) => console.log("Error al poblar PGSQL", error.message));
           });
 
           // IMPORTANTE: cerrar la conexion
@@ -150,23 +176,102 @@ module.exports = (app) => {
           console.log(
             "Llama a la funcion iniciar envio que se retrasa 1 min en ejecutarse No Asistidos"
           );
-          iniciarEnvio();
+          //iniciarEnvio();
         }
       );
     });
   }
 
+  //primeraConsultaJkmt();
+
+  // Trae los turnos del JKMT al PGSQL
+  // function injeccionFirebird() {
+  //   Firebird.attach(odontos, function (err, db) {
+  //     if (err) throw err;
+
+  //     // db = DATABASE
+  //     db.query(
+  //       // Trae los ultimos 50 registros de turnos del JKMT
+  //       "SELECT * FROM VW_RESUMEN_TURNOS_AYER",
+  //       //"SELECT COUNT(*) FROM VW_RESUMEN_TURNOS_HOY",
+  //       function (err, result) {
+  //         console.log("Cant de turnos obtenidos del JKMT:", result.length);
+
+  //         // Recorre el array que contiene los datos e inserta en la base de postgresql
+  //         result.forEach((e) => {
+  //           // Si el nro de cert trae NULL cambiar por 000000
+  //           if (!e.NRO_CERT) {
+  //             e.NRO_CERT = " ";
+  //           }
+  //           // Si no tiene plan
+  //           if (!e.PLAN_CLIENTE) {
+  //             e.PLAN_CLIENTE = " ";
+  //           }
+  //           // Si la hora viene por ej: 11:0 entonces agregar el 0 al final
+  //           if (e.HORA[3] === "0") {
+  //             e.HORA = e.HORA + "0";
+  //           }
+  //           // Si la hora viene por ej: 10:3 o 11:2 entonces agregar el 0 al final
+  //           if (e.HORA.length === 4 && e.HORA[0] === "1") {
+  //             e.HORA = e.HORA + "0";
+  //           }
+  //           // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
+  //           // Si no reemplazar el 0 por el 595
+  //           if (!e.TELEFONO_MOVIL) {
+  //             e.TELEFONO_MOVIL = "595000";
+  //             e.estado_envio = 2;
+  //           } else {
+  //             e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
+  //           }
+
+  //           // Reemplazar por mi nro para probar el envio
+  //           // if (!e.TELEFONO_MOVIL) {
+  //           //   e.TELEFONO_MOVIL = "595000";
+  //           //   e.estado_envio = 2;
+  //           // } else {
+  //           //   e.TELEFONO_MOVIL = "595986153301";
+  //           // }
+
+  //           // Poblar PGSQL
+  //           Primera_consulta.create(e)
+  //             //.then((result) => res.json(result))
+  //             .catch((error) => console.log("Error al poblar PGSQL", error.message));
+  //         });
+
+  //         // IMPORTANTE: cerrar la conexion
+  //         db.detach();
+  //         console.log(
+  //           "Llama a la funcion iniciar envio que se retrasa 1 min en ejecutarse No Asistidos"
+  //         );
+  //         iniciarEnvio();
+  //       }
+  //     );
+  //   });
+  // }
+
+  // Calcular la fecha de hace un mes
+  const fechaHaceUnMes = new Date();
+  fechaHaceUnMes.setMonth(fechaHaceUnMes.getMonth() - 1);
+
   // Inicia los envios - Consulta al PGSQL
-  let losTurnos = [];
+  let losRegistros = [];
   function iniciarEnvio() {
     setTimeout(() => {
       Primera_consulta.findAll({
-        where: { estado_envio: 0 },
-        order: [["createdAt", "DESC"]],
+        where: {
+          estado_envio: 0,
+          ASISTIO: 0,
+          ACTIVO: 1,
+          FECHA_ULT_ENVIO: {
+            [Op.lt]: fechaHaceUnMes.toISOString().split('T')[0], // Fecha de creación menor que hace un mes en formato YYYY-MM-DD
+          },
+        },
+        order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
+        limit: 500 // Límite de 500 registros
       })
         .then((result) => {
-          losTurnos = result;
-          console.log("Enviando turnos No Asistidos:", losTurnos.length);
+          losRegistros = result;
+          console.log("Enviando primera consulta:", losRegistros.length);
         })
         .then(() => {
           enviarMensaje();
@@ -179,19 +284,20 @@ module.exports = (app) => {
     }, tiempoRetrasoPGSQL);
   }
 
+  iniciarEnvio();
+
   // Envia los mensajes
   let retraso = () => new Promise((r) => setTimeout(r, tiempoRetrasoEnvios));
   async function enviarMensaje() {
-    console.log(
-      "Inicia el recorrido del for para enviar los turnos No Asistidos"
-    );
-    for (let i = 0; i < losTurnos.length; i++) {
-      const turnoId = losTurnos[i].id_turno;
-      mensajePieCompleto = losTurnos[i].CLIENTE + mensajePie;
+    let fechaHoy = moment();
+    console.log("Inicia el recorrido del for para enviar las notificaciones de primera consulta");
+    for (let i = 0; i < losRegistros.length; i++) {
+      const clienteId = losRegistros[i].id_cliente;
+      mensajePieCompleto = mensajePie;
 
       const data = {
         message: mensajePieCompleto,
-        phone: losTurnos[i].TELEFONO_MOVIL,
+        phone: losRegistros[i].TELEFONO_MOVIL,
         mimeType: fileMimeTypeMedia,
         data: fileBase64Media,
         fileName: "",
@@ -209,10 +315,11 @@ module.exports = (app) => {
             // Se actualiza el estado a 1
             const body = {
               estado_envio: 1,
+              FECHA_ULT_ENVIO: fechaHoy.format('YYYY-MM-DD')
             };
 
             Primera_consulta.update(body, {
-              where: { id_turno: turnoId },
+              where: { id_cliente: clienteId },
             })
               //.then((result) => res.json(result))
               .catch((error) => {
@@ -227,10 +334,11 @@ module.exports = (app) => {
             // Se actualiza el estado a 3
             const body = {
               estado_envio: 3,
+              FECHA_ULT_ENVIO: fechaHoy.format('YYYY-MM-DD')
             };
 
             Primera_consulta.update(body, {
-              where: { id_turno: turnoId },
+              where: { id_cliente: clienteId },
             })
               //.then((result) => res.json(result))
               .catch((error) => {
@@ -244,17 +352,17 @@ module.exports = (app) => {
             console.log("No enviado - error");
             const errMsg = data.responseExSave.error.slice(0, 17);
             if (errMsg === "Escanee el código") {
-              updateEstatusERROR(turnoId, 104);
+              updateEstatusERROR(clienteId, 104);
               //console.log("Error 104: ", data.responseExSave.error);
             }
             // Sesion cerrada o desvinculada. Puede que se envie al abrir la sesion o al vincular
             if (errMsg === "Protocol error (R") {
-              updateEstatusERROR(turnoId, 105);
+              updateEstatusERROR(clienteId, 105);
               //console.log("Error 105: ", data.responseExSave.error);
             }
             // El numero esta mal escrito o supera los 12 caracteres
             if (errMsg === "Evaluation failed") {
-              updateEstatusERROR(turnoId, 106);
+              updateEstatusERROR(clienteId, 106);
               //console.log("Error 106: ", data.responseExSave.error);
             }
           }
@@ -268,14 +376,16 @@ module.exports = (app) => {
     console.log("Fin del envío");
   }
 
-  function updateEstatusERROR(turnoId, cod_error) {
+  function updateEstatusERROR(clienteId, cod_error) {
+    let fechaHoy = moment();
     // Se actualiza el estado segun el errors
     const body = {
       estado_envio: cod_error,
+      FECHA_ULT_ENVIO: fechaHoy.format('YYYY-MM-DD')
     };
 
     Primera_consulta.update(body, {
-      where: { id_turno: turnoId },
+      where: { id_cliente: clienteId },
     })
       //.then((result) => res.json(result))
       .catch((error) => {
@@ -376,10 +486,7 @@ module.exports = (app) => {
           { estado_envio: 1 },
           {
             updatedAt: {
-              [Op.between]: [
-                fecha_desde + " 00:00:00",
-                fecha_hasta + " 23:59:59",
-              ],
+              [Op.between]: [fecha_desde + " 00:00:00", fecha_hasta + " 23:59:59"],
             },
           },
         ],
@@ -464,7 +571,7 @@ module.exports = (app) => {
   // });
 
   app
-    .route("/primeraConsulta/:id_turno")
+    .route("/primeraConsulta/:id_cliente")
     .get((req, res) => {
       Primera_consulta.findOne({
         where: req.params,
