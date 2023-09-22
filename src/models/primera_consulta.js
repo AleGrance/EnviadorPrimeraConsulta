@@ -14,7 +14,6 @@ module.exports = (sequelize, DataType) => {
         COD_CONFIGURACION: {
             type: DataType.INTEGER,
             allowNull: false,
-            unique: true
         },
         NOMBRE: {
             type: DataType.STRING,
