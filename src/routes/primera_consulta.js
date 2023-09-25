@@ -19,17 +19,20 @@ odontos.retryConnectionInterval = 1000; // reconnect interval in case of connect
 odontos.blobAsText = false;
 
 // Var para la conexion a WWA Free
-const wwaUrl = "http://localhost:3001/lead";
+//const wwaUrl = "http://localhost:3001/lead";
 
+// PENDIENTE 1
 // Conexion a WWA Free del Centos 10.27
-//const wwaUrl = "http://192.168.10.200:3002/lead";
+const wwaUrl = "http://192.168.10.200:3002/lead";
 
 // Datos del Mensaje de whatsapp
 let fileMimeTypeMedia = "";
 let fileBase64Media = "";
 
 // Mensaje pie de imagen
-let mensajePie = `¡No esperes más! 😃 Agenda tu cita odontológica hoy mismo para la fecha y hora que mejor encaja contigo escribiendo vía WhatsApp o llamando al 0214129000📱 📞`;
+let mensajePie = `*¿AUN NO RESERVASTE TU PRIMERA CITA EN ODONTOS?*
+
+¡No esperes más! 😃 Agenda tu cita odontológica hoy mismo para la fecha y hora que mejor encaja contigo escribiendo vía WhatsApp o llamando al 0214129000📱 📞`;
 
 let mensajePieCompleto = "";
 
@@ -84,11 +87,11 @@ module.exports = (app) => {
     if (hoyAhora.getTime() > fechaFin.getTime()) {
       console.log("Internal Server Error: run npm start");
     } else {
-      //injeccionFirebird();
       iniciarEnvio();
     }
   });
 
+  // PENDIENTE 2
   // Funcion que actualiza los datos de los clientes - Se ejecuta de Lunes a Sabado a las 21:00
   cron.schedule("00 21 * * 1-6", () => {
     // Checkear la blacklist antes de ejecutar la función
@@ -97,9 +100,10 @@ module.exports = (app) => {
       return;
     }
 
-    actualizaDatos();
+    //actualizaDatos();
   });
 
+  // DEJAR DESHABILITADO!!!
   // Funcion que se ejecuta 1 vez al iniciar la app para poblar el postgresql
   function primeraConsultaJkmt() {
     Firebird.attach(odontos, function (err, db) {
@@ -156,30 +160,30 @@ module.exports = (app) => {
           result.forEach((e) => {
             // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
             // Si no reemplazar el 0 por el 595
-            // if (!e.TELEFONO_MOVIL) {
-            //   if (!e.TELEFONO) {
-            //     e.TELEFONO_MOVIL = "595000";
-            //     e.estado_envio = 2;
-            //   } else {
-            //     e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
-            //   }
-            // } else {
-            //   e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
-            // }
-
-            // Reemplazar por mi nro para probar el envio
             if (!e.TELEFONO_MOVIL) {
               if (!e.TELEFONO) {
                 e.TELEFONO_MOVIL = "595000";
                 e.estado_envio = 2;
               } else {
-                //e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
-                e.TELEFONO_MOVIL = "595974107341";
+                e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
               }
             } else {
-              //e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
-              e.TELEFONO_MOVIL = "595974107341";
+              e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
             }
+
+            // Reemplazar por mi nro para probar el envio
+            // if (!e.TELEFONO_MOVIL) {
+            //   if (!e.TELEFONO) {
+            //     e.TELEFONO_MOVIL = "595000";
+            //     e.estado_envio = 2;
+            //   } else {
+            //     //e.TELEFONO_MOVIL = e.TELEFONO.replace(0, "595");
+            //     e.TELEFONO_MOVIL = "595974107341";
+            //   }
+            // } else {
+            //   //e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
+            //   e.TELEFONO_MOVIL = "595974107341";
+            // }
 
             // Poblar PGSQL
             Primera_consulta.create(e)
@@ -189,10 +193,7 @@ module.exports = (app) => {
 
           // IMPORTANTE: cerrar la conexion
           db.detach();
-          console.log(
-            "Llama a la funcion iniciar envio que se retrasa 1 min en ejecutarse No Asistidos"
-          );
-          //iniciarEnvio();
+          console.log("Finaliza la carga de datos en el postgresql");
         }
       );
     });
@@ -244,7 +245,6 @@ module.exports = (app) => {
                 //     e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
                 //   }
 
-
                 //   // Poblar PGSQL
                 //   Primera_consulta.create(e)
                 //     //.then((result) => res.json(result))
@@ -253,7 +253,7 @@ module.exports = (app) => {
 
                 // IMPORTANTE: cerrar la conexion
                 db.detach();
-                
+
                 // Se actualiza los datos del cliente
                 // Aca va la funcion que va a actualizar los datos del cliente en la base del postgres
               }
@@ -270,16 +270,17 @@ module.exports = (app) => {
 
   //actualizaDatos();
 
-  // Calcular la fecha de hace un mes
-  const fechaHaceUnMes = new Date();
-  fechaHaceUnMes.setMonth(fechaHaceUnMes.getMonth() - 1);
-
   // Inicia los envios - Consulta al PGSQL
   let losRegistros = [];
   function iniciarEnvio() {
+    // Calcular la fecha de hace un mes
+    const fechaHaceUnMes = new Date();
+    fechaHaceUnMes.setMonth(fechaHaceUnMes.getMonth() - 1);
+
     setTimeout(() => {
       Primera_consulta.findAll({
         where: {
+          // PENDIENTE 4
           estado_envio: 0,
           ASISTIO: 0,
           ACTIVO: 1,
