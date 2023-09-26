@@ -22,8 +22,8 @@ odontos.blobAsText = false;
 //const wwaUrl = "http://localhost:3001/lead";
 
 // PENDIENTE 1
-// Conexion a WWA Free del Centos 10.27
-const wwaUrl = "http://192.168.10.200:3002/lead";
+// Conexion a WWA Free del Centos 10.200
+const wwaUrl = "http://192.168.10.200:3011/lead";
 
 // Datos del Mensaje de whatsapp
 let fileMimeTypeMedia = "";
