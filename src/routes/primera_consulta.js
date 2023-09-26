@@ -21,7 +21,6 @@ odontos.blobAsText = false;
 // Var para la conexion a WWA Free
 //const wwaUrl = "http://localhost:3001/lead";
 
-// PENDIENTE 1
 // Conexion a WWA Free del Centos 10.200
 const wwaUrl = "http://192.168.10.200:3011/lead";
 
@@ -422,7 +421,7 @@ module.exports = (app) => {
   */
 
   app
-    .route("/primeraConsulta")
+    .route("/api/primeraConsulta")
     .get((req, res) => {
       Primera_consulta.findAll({
         order: [["createdAt", "DESC"]],
@@ -442,7 +441,7 @@ module.exports = (app) => {
     });
 
   // Trae los turnos que tengan en el campo estado_envio = 0
-  app.route("/primeraConsultaPendientes").get((req, res) => {
+  app.route("/api/primeraConsultaPendientes").get((req, res) => {
     Primera_consulta.findAll({
       where: { estado_envio: 0 },
       order: [["FECHA_CREACION", "ASC"]],
@@ -457,7 +456,7 @@ module.exports = (app) => {
   });
 
   // Trae los turnos que ya fueron notificados hoy
-  app.route("/primeraConsultaNotificados").get((req, res) => {
+  app.route("/api/primeraConsultaNotificados").get((req, res) => {
     // Fecha de hoy 2022-02-30
     let fechaHoy = new Date().toISOString().slice(0, 10);
 
@@ -483,7 +482,7 @@ module.exports = (app) => {
   });
 
   // Trae la cantidad de turnos enviados por rango de fecha desde hasta
-  app.route("/turnosNoAsistidosNotificadosFecha").post((req, res) => {
+  app.route("/api/turnosNoAsistidosNotificadosFecha").post((req, res) => {
     let fechaHoy = new Date().toISOString().slice(0, 10);
     let { fecha_desde, fecha_hasta } = req.body;
 
@@ -592,46 +591,46 @@ module.exports = (app) => {
   //     });
   // });
 
-  app
-    .route("/primeraConsulta/:id_cliente")
-    .get((req, res) => {
-      Primera_consulta.findOne({
-        where: req.params,
-        include: [
-          {
-            model: Users,
-            attributes: ["user_fullname"],
-          },
-        ],
-      })
-        .then((result) => res.json(result))
-        .catch((error) => {
-          res.status(404).json({
-            msg: error.message,
-          });
-        });
-    })
-    .put((req, res) => {
-      Primera_consulta.update(req.body, {
-        where: req.params,
-      })
-        .then((result) => res.json(result))
-        .catch((error) => {
-          res.status(412).json({
-            msg: error.message,
-          });
-        });
-    })
-    .delete((req, res) => {
-      //const id = req.params.id;
-      Primera_consulta.destroy({
-        where: req.params,
-      })
-        .then(() => res.json(req.params))
-        .catch((error) => {
-          res.status(412).json({
-            msg: error.message,
-          });
-        });
-    });
+  // app
+  //   .route("api/primeraConsulta/:id_cliente")
+  //   .get((req, res) => {
+  //     Primera_consulta.findOne({
+  //       where: req.params,
+  //       include: [
+  //         {
+  //           model: Users,
+  //           attributes: ["user_fullname"],
+  //         },
+  //       ],
+  //     })
+  //       .then((result) => res.json(result))
+  //       .catch((error) => {
+  //         res.status(404).json({
+  //           msg: error.message,
+  //         });
+  //       });
+  //   })
+  //   .put((req, res) => {
+  //     Primera_consulta.update(req.body, {
+  //       where: req.params,
+  //     })
+  //       .then((result) => res.json(result))
+  //       .catch((error) => {
+  //         res.status(412).json({
+  //           msg: error.message,
+  //         });
+  //       });
+  //   })
+  //   .delete((req, res) => {
+  //     //const id = req.params.id;
+  //     Primera_consulta.destroy({
+  //       where: req.params,
+  //     })
+  //       .then(() => res.json(req.params))
+  //       .catch((error) => {
+  //         res.status(412).json({
+  //           msg: error.message,
+  //         });
+  //       });
+  //   });
 };

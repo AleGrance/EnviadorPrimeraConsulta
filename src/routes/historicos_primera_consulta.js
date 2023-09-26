@@ -71,7 +71,7 @@ module.exports = (app) => {
    */
 
   app
-    .route("/historicos_primera_consulta")
+    .route("/api/historicos_primera_consulta")
     .get((req, res) => {
       Historicos_primera_consulta.findAll()
         .then((result) => res.json(result))
@@ -88,7 +88,7 @@ module.exports = (app) => {
     });
 
   // Historicos por rango de fecha
-  app.route("/historicosNoAsistidosFecha").post((req, res) => {
+  app.route("/api/historicosNoAsistidosFecha").post((req, res) => {
     let fechaHoy = new Date().toISOString().slice(0, 10);
     let { fecha_desde, fecha_hasta } = req.body;
 
