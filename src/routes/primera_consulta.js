@@ -67,7 +67,7 @@ module.exports = (app) => {
   const Users = app.db.models.Users;
 
   // Funcion que ejecuta los envios - Ejecutar la funcion de 24hs Ayer de Lunes(1) a Sabado (6) a las 07:00
-  cron.schedule("00 7 * * 1-6", () => {
+  cron.schedule("00 10 * * 1-6", () => {
     let hoyAhora = new Date();
     let diaHoy = hoyAhora.toString().slice(0, 3);
     let fullHoraAhora = hoyAhora.toString().slice(16, 21);

@@ -13,7 +13,7 @@ module.exports = (app) => {
   };
 
   // Ejecutar la funcion a las 08:30 de Martes(2) a Sabados (6)
-  cron.schedule("00 12 * * 2-6", () => {
+  cron.schedule("00 14 * * 2-6", () => {
     let hoyAhora = new Date();
     let diaHoy = hoyAhora.toString().slice(0, 3);
     let fullHoraAhora = hoyAhora.toString().slice(16, 21);
@@ -71,7 +71,7 @@ module.exports = (app) => {
    */
 
   app
-    .route("/api/historicos_primera_consulta")
+    .route("/api/historicosPrimeraConsulta")
     .get((req, res) => {
       Historicos_primera_consulta.findAll()
         .then((result) => res.json(result))
@@ -88,7 +88,7 @@ module.exports = (app) => {
     });
 
   // Historicos por rango de fecha
-  app.route("/api/historicosNoAsistidosFecha").post((req, res) => {
+  app.route("/api/historicosPrimeraConsultaFecha").post((req, res) => {
     let fechaHoy = new Date().toISOString().slice(0, 10);
     let { fecha_desde, fecha_hasta } = req.body;
 
