@@ -1,3 +1,4 @@
+const Sequelize = require("sequelize");
 const { Op } = require("sequelize");
 const cron = require("node-cron");
 const fs = require("fs");
@@ -18,11 +19,9 @@ odontos.role = null; // default
 odontos.retryConnectionInterval = 1000; // reconnect interval in case of connection drop
 odontos.blobAsText = false;
 
-// Var para la conexion a WWA Free
-//const wwaUrl = "http://localhost:3001/lead";
-
 // Conexion a WWA Free del Centos 10.200
 const wwaUrl = "http://192.168.10.200:3011/lead";
+//const wwaUrl = "http://localhost:3001/lead";
 
 // Datos del Mensaje de whatsapp
 let fileMimeTypeMedia = "";
@@ -31,12 +30,12 @@ let fileBase64Media = "";
 // Mensaje pie de imagen
 let mensajePie = `*¿AUN NO RESERVASTE TU PRIMERA CITA EN ODONTOS?*
 
-¡No esperes más! 😃 Agenda tu cita odontológica hoy mismo para la fecha y hora que mejor encaja contigo escribiendo vía WhatsApp o llamando al 0214129000📱 📞`;
+¡No esperes mas!😃 Pide cita hoy mismo para el día y hora que mejor encaja contigo escribiendo vía WhatsApp ingresando al siguiente link: https://wa.me/5950214129000 o llamando al 0214129000📱 📞`;
 
 let mensajePieCompleto = "";
 
 // Ruta de la imagen JPEG
-const imagePath = path.join(__dirname, "..", "assets", "img", "primera_consulta.png");
+const imagePath = path.join(__dirname, "..", "assets", "img", "primera_consulta.jpeg");
 // Leer el contenido de la imagen como un buffer
 const imageBuffer = fs.readFileSync(imagePath);
 // Convertir el buffer a base64
@@ -66,7 +65,7 @@ module.exports = (app) => {
   const Primera_consulta = app.db.models.Primera_consulta;
   const Users = app.db.models.Users;
 
-  // Funcion que ejecuta los envios - Ejecutar la funcion de 24hs Ayer de Lunes(1) a Sabado (6) a las 07:00
+  // Funcion que ejecuta los envios
   cron.schedule("00 10 * * 1-6", () => {
     let hoyAhora = new Date();
     let diaHoy = hoyAhora.toString().slice(0, 3);
@@ -91,7 +90,7 @@ module.exports = (app) => {
   });
 
   // PENDIENTE 2
-  // Funcion que actualiza los datos de los clientes - Se ejecuta de Lunes a Sabado a las 21:00
+  // Funcion que actualiza los datos de los clientes - Lun a Sab a las 21hs
   cron.schedule("00 21 * * 1-6", () => {
     // Checkear la blacklist antes de ejecutar la función
     if (blacklist.includes(dateString)) {
@@ -102,6 +101,61 @@ module.exports = (app) => {
     //actualizaDatos();
   });
 
+  function actualizaDatos() {
+    let losClientes = [];
+    // Obtener los datos de los clientes a quienes se les sigue enviando mensajes
+    Primera_consulta.findAll({
+      where: {
+        ASISTIO: 0,
+        ACTIVO: 1,
+      },
+      order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
+      attributes: ["COD_CLIENTE"],
+      limit: 15, // Límite de 500 registros
+    })
+      .then((result) => {
+        losClientes = result;
+        console.log("Los clientes de postgres a consultar estados:", losClientes.length);
+      })
+      .then(async () => {
+        // Inicia el for por cada cliente para consultar su estado al JKMT
+
+        for (let item of losClientes) {
+          //console.log(item.COD_CLIENTE);
+
+          Firebird.attach(odontos, function (err, db) {
+            if (err) throw err;
+
+            // db = DATABASE
+            db.query(
+              // La consulta que se hace para saber si el cliente sigue sin consultar y si sigue activo
+              `SELECT * FROM PROC_GET_ALERTA_CLIENTE(@${item.COD_CLIENTE})`,
+
+              function (err, result) {
+                console.log("Cant de registros obtenidos del JKMT:", result.length);
+
+                // Recorre el array que contiene los datos e inserta en la base de postgresql
+                result.forEach((e) => {});
+
+                // IMPORTANTE: cerrar la conexion
+                db.detach();
+
+                // Se actualiza los datos del cliente
+                // Aca va la funcion que va a actualizar los datos del cliente en la base del postgres
+              }
+            );
+          });
+
+          await retraso();
+        }
+      })
+      .catch((error) => {
+        res.status(402).json({
+          msg: error.menssage,
+        });
+      });
+  }
+
   // DEJAR DESHABILITADO!!!
   // Funcion que se ejecuta 1 vez al iniciar la app para poblar el postgresql
   function primeraConsultaJkmt() {
@@ -110,7 +164,7 @@ module.exports = (app) => {
 
       // db = DATABASE
       db.query(
-        // Trae los ultimos 50 registros de turnos del JKMT
+        // Trae los registros
         `SELECT c.cod_configuracion,
         CL.COD_CLIENTE,
         CL.NOMBRE,
@@ -200,75 +254,6 @@ module.exports = (app) => {
 
   //primeraConsultaJkmt();
 
-  // Funcion que se ejecuta para actualizar los datos de los clientes ASITIO, ACTIVO, Nuevos clientes
-  function actualizaDatos() {
-    let losClientes = [];
-    // Obtener los datos de los clientes a quienes se les sigue enviando mensajes
-    Primera_consulta.findAll({
-      where: {
-        ASISTIO: 0,
-        ACTIVO: 1,
-      },
-      order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
-      attributes: ["COD_CLIENTE"],
-      limit: 15, // Límite de 500 registros
-    })
-      .then((result) => {
-        losClientes = result;
-        console.log("Los clientes de postgres a consultar estados:", losClientes.length);
-      })
-      .then(() => {
-        // Inicia el for por cada cliente para consultar su estado al JKMT
-        for (let item of losClientes) {
-          console.log(item.COD_CLIENTE);
-
-          Firebird.attach(odontos, function (err, db) {
-            if (err) throw err;
-
-            // db = DATABASE
-            db.query(
-              // Escribir el script que va a traer los datos del jakemate
-              "SELECT C.EDAD FROM CLIENTES C WHERE C.COD_CLIENTE = " + item.COD_CLIENTE + ";",
-
-              function (err, result) {
-                console.log("Cant de turnos obtenidos del JKMT:", result);
-
-                // Recorre el array que contiene los datos e inserta en la base de postgresql
-                // result.forEach((e) => {
-                //   // Si el nro de tel trae NULL cambiar por 595000 y cambiar el estado a 2
-                //   // Si no reemplazar el 0 por el 595
-                //   if (!e.TELEFONO_MOVIL) {
-                //     e.TELEFONO_MOVIL = "595000";
-                //     e.estado_envio = 2;
-                //   } else {
-                //     e.TELEFONO_MOVIL = e.TELEFONO_MOVIL.replace(0, "595");
-                //   }
-
-                //   // Poblar PGSQL
-                //   Primera_consulta.create(e)
-                //     //.then((result) => res.json(result))
-                //     .catch((error) => console.log("Error al poblar PGSQL", error.message));
-                // });
-
-                // IMPORTANTE: cerrar la conexion
-                db.detach();
-
-                // Se actualiza los datos del cliente
-                // Aca va la funcion que va a actualizar los datos del cliente en la base del postgres
-              }
-            );
-          });
-        }
-      })
-      .catch((error) => {
-        res.status(402).json({
-          msg: error.menssage,
-        });
-      });
-  }
-
-  //actualizaDatos();
-
   // Inicia los envios - Consulta al PGSQL
   let losRegistros = [];
   function iniciarEnvio() {
@@ -279,20 +264,32 @@ module.exports = (app) => {
     setTimeout(() => {
       Primera_consulta.findAll({
         where: {
-          // PENDIENTE 4
-          estado_envio: 0,
-          ASISTIO: 0,
-          ACTIVO: 1,
-          FECHA_ULT_ENVIO: {
-            [Op.lt]: fechaHaceUnMes.toISOString().split("T")[0], // Fecha de creación menor que hace un mes en formato YYYY-MM-DD
-          },
+          [Op.and]: [
+            Sequelize.where(Sequelize.fn("char_length", Sequelize.col("TELEFONO_MOVIL")), 12), // Se optiene sólo los registros que tengan el nro con 12 digitos
+            {
+              // PENDIENTE 4
+              estado_envio: 0,
+              ASISTIO: 0,
+              ACTIVO: 1,
+              FECHA_ULT_ENVIO: {
+                [Op.lt]: fechaHaceUnMes.toISOString().split("T")[0], // Fecha de creación menor que hace un mes en formato YYYY-MM-DD
+              },
+            },
+          ],
         },
+
         order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
         limit: 500, // Límite de 500 registros
       })
         .then((result) => {
           losRegistros = result;
           console.log("Enviando primera consulta:", losRegistros.length);
+
+          // Cuando ya no haya envios pendientes
+          if (losRegistros.length == 0) {
+            console.log("No hay registros pendiente de envios. Se actualizan los registros");
+            actualizaDatos();
+          }
         })
         .then(() => {
           enviarMensaje();
@@ -305,10 +302,11 @@ module.exports = (app) => {
     }, tiempoRetrasoPGSQL);
   }
 
-  //iniciarEnvio();
+  iniciarEnvio();
 
   // Envia los mensajes
   let retraso = () => new Promise((r) => setTimeout(r, tiempoRetrasoEnvios));
+
   async function enviarMensaje() {
     let fechaHoy = moment();
     console.log("Inicia el recorrido del for para enviar las notificaciones de primera consulta");
