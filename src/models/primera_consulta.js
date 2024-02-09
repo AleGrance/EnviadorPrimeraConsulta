@@ -37,13 +37,17 @@ module.exports = (sequelize, DataType) => {
             allowNull: false,
             defaultValue: 1
         },
-
         FECHA_ULT_ENVIO: {
             type: DataType.DATE,
             allowNull: true,
             defaultValue: '2023-08-24'
         },
         estado_envio: {
+            type: DataType.INTEGER,
+            allowNull: false,
+            defaultValue: 0
+        },
+        cant_envios: {
             type: DataType.INTEGER,
             allowNull: false,
             defaultValue: 0

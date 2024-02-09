@@ -1,6 +1,12 @@
 import express from "express";
 import consign from "consign";
 
+// Importar para leer los valores de entorno
+require('dotenv').config();
+
+// Imprime todas las variables de entorno
+//console.log(process.env);
+
 const app = express();
 
 //cross access
