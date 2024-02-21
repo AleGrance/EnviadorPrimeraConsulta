@@ -114,6 +114,11 @@ module.exports = (app) => {
     //   });
   });
 
+  // Funcion que se ejecuta todos los dias a las 18:00 y cerea el estado de los registros si ya se enviaron todos
+  cron.schedule("00 18 * * 1-6", () => {
+    checkPendientes();
+  });
+
   // Inicia las funciones promesas
   function funcionPromesa() {
     return new Promise((resolve, reject) => {
@@ -565,6 +570,46 @@ module.exports = (app) => {
         res.status(412).json({
           msg: error.message,
         });
+      });
+  }
+
+  // Checkear si ya no hay pendientes de envio y poner en 0 los estados de los envios
+  function checkPendientes() {
+    Primera_consulta.findAll({
+      where: {
+        [Op.and]: [
+          {
+            // PENDIENTE 4
+            estado_envio: 0,
+            ASISTIO: 0,
+            ACTIVO: 1,
+          },
+        ],
+      },
+
+      order: [["COD_CONFIGURACION", "ASC"]], // Se ordena por NRO_CERT de mas antiguo al mas nuevo
+      limit: 500, // Límite de 500 registros
+    })
+      .then(async (result) => {
+        console.log("Pendientes de envio:", result.length);
+        try {
+          // Ejecuta una consulta raw
+          if (result.length == 0) {
+            console.log("Ya no quedan pendientes, se resetean los estados.");
+            // Actualizar todos los registros de la tabla "Primera_consulta" donde "estado_envio" es 1
+            const resultadoSQL = await Primera_consulta.update(
+              { estado_envio: 0 }, // Valores a actualizar
+              { where: { estado_envio: 1 } } // Condiciones de actualización
+            );
+
+            console.log("Filas afectadas:", resultadoSQL);
+          }
+        } catch (error) {
+          console.error("Error:", error);
+        }
+      })
+      .catch((error) => {
+        console.log(error);
       });
   }
 
