@@ -248,7 +248,7 @@ module.exports = (app) => {
         //   e.TELEFONO_MOVIL = "595974107341";
         // }
 
-        // Poblar PGSQL
+        // Poblar PGSQL - Se insertan solamente los que tengan 12 carateres en el campo numero
         if (e.TELEFONO_MOVIL.length == 12) {
           Primera_consulta.create(e)
             //.then((result) => res.json(result))
@@ -307,7 +307,7 @@ module.exports = (app) => {
               ASISTIO: 0,
               ACTIVO: 1,
               FECHA_ULT_ENVIO: {
-                [Op.lt]: fechaHaceUnMes.toISOString().split("T")[0], // Fecha de creación menor que hace un mes en formato YYYY-MM-DD
+                [Op.lt]: fechaHaceUnMes.toISOString().split("T")[0], // Fecha de ultimo envio menor que hace un mes en formato YYYY-MM-DD
               },
             },
           ],
@@ -319,11 +319,6 @@ module.exports = (app) => {
         .then((result) => {
           losRegistros = result;
           console.log("Enviando primera consulta:", losRegistros.length);
-
-          // Cuando ya no haya envios pendientes - Se debe poner a 0 el campo estado_envio en todos los registros
-          if (losRegistros.length == 0) {
-            console.log("No hay registros pendiente de envios. Se actualizan los registros");
-          }
         })
         .then(() => {
           enviarMensaje();
@@ -375,6 +370,7 @@ module.exports = (app) => {
             const body = {
               estado_envio: 1,
               FECHA_ULT_ENVIO: fechaHoy.format("YYYY-MM-DD"),
+              cant_envios: Sequelize.literal('cant_envios + 1')
             };
 
             Primera_consulta.update(body, {
